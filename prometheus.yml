@@ -1,0 +1,7 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: "schedlens"
+    static_configs:
+      - targets: ["172.20.220.185:2222"]
