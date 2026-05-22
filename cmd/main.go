@@ -4,6 +4,7 @@ import (
 	"SchedLens/internal/api"
 	"SchedLens/internal/cli"
 	"SchedLens/internal/exporter"
+	"SchedLens/internal/healer"
 	"SchedLens/internal/metrics"
 	"SchedLens/internal/proc"
 	"SchedLens/internal/snapshot"
@@ -37,10 +38,19 @@ func main() {
 	time.Sleep(2 * time.Second)
 
 	engine := metrics.NewEngine()
+	h := healer.NewHealer(30)
 	// Main loop
 	for {
 		snapshot2, _ := proc.ReadAllProcesses()
 		results := engine.Calculate(snapshot2, snapshot1, 2*time.Second)
+
+		currentPIDs := make(map[int]bool)
+		for _, p := range snapshot2 {
+			currentPIDs[p.PID] = true
+		}
+
+		h.Cleanup(currentPIDs)
+		h.Heal(results)
 
 		// Fan-out to all three simultaneously
 		go exp.Update(results)
