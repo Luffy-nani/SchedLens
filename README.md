@@ -1,6 +1,6 @@
 # SchedLens
 
-A Linux scheduler observability tool that reads kernel `/proc` data, calculates CPU fairness scores, detects process starvation, and visualizes everything in real time via Grafana.
+A self-healing Linux scheduler monitor that detects starved processes and automatically adjusts kernel priority via syscalls without human intervention and visualizes everything in real time via Grafana.
 
 ---
 
@@ -30,14 +30,33 @@ A score of 1.0 means perfectly fair. Lower means the process is getting less tha
 
 **Starvation Detection:**
 ```
-If wait_time_delta > threshold AND cpu_time_delta < minimum → STARVED
+If process state == "R" (runnable, not sleeping)
+AND wait_time_delta > threshold
+AND cpu_time_delta < minimum
+AND consecutive starved checks >= 3
+    → flag as STARVED
 ```
+Key design decisions:
+- Only runnable processes (state "R") can be starved — sleeping processes are waiting on I/O, not the scheduler
+- Requires 3 consecutive checks — prevents false positives from momentary spikes
+- Resets tick count if process recovers between checks
 
 **Context Switch Rate:**
 ```
 switch_rate = (current_switches - previous_switches) / time_delta
 ```
 High involuntary switches means the process keeps getting kicked off the CPU.
+
+**Self-Healing:**
+```
+If process is starved for 3 consecutive checks:
+    → Check current nice value
+    → If nice == 0 (user hasn't set it): boost to nice -5 via syscall
+    → Start 30 second cooldown before re-evaluating
+    → If process recovers: rollback to nice 0 automatically
+    → If process dies while boosted: cleanup to prevent memory leak
+```
+SchedLens never touches processes the user has manually prioritized (nice ≠ 0).
 
 ---
 
@@ -47,13 +66,14 @@ High involuntary switches means the process keeps getting kicked off the CPU.
 main goroutine
     ↓
 Collector goroutine (reads /proc every 2s)
-    ↓ procChan
-Engine goroutine (calculates metrics)
-    ↓ metricsChan
-Fan-out to three goroutines simultaneously:
+    ↓
+Engine goroutine (calculates metrics + starvation ticks)
+    ↓
+Fan-out simultaneously:
     ├── OTel Exporter  → Prometheus → Grafana
     ├── MongoDB        → historical snapshots
-    └── CLI            → live terminal table
+    ├── CLI            → live terminal table
+    └── Healer         → renice starved processes
 ```
 
 Everything communicates via channels. No shared memory. No mutexes.
@@ -110,8 +130,8 @@ cd SchedLens
 # Start Prometheus, Grafana, MongoDB
 docker compose up -d
 
-# Run SchedLens
-go run cmd/main.go
+# Run SchedLens (sudo required for renice)
+sudo go run cmd/main.go
 ```
 
 Then open:
@@ -140,3 +160,5 @@ Then open:
 - **OpenTelemetry** — how OTel sits between your app and Prometheus, and why that abstraction matters
 - **Go concurrency patterns** — goroutines, channels, fan-out pipelines, why Go's model avoids mutexes
 - **Observability stack** — how Prometheus scrapes metrics and how Grafana queries Prometheus to build dashboards
+- **Linux syscall package** — how to call kernel syscalls directly from Go using `syscall.Setpriority` and `syscall.Getpriority` instead of spawning subprocesses
+- **Edge case thinking** — starvation detection has many false positive traps: sleeping processes, momentary spikes, double-boosting, dead process cleanup. Each required a specific fix.
