@@ -123,10 +123,11 @@ Then open:
 
 ## Screenshots
 
-Grafana Dashboard
+<h1>Grafana Dashboard</h1>
+
 ![Grafana Dashboard](image-2.png)
 
-Prometheus metrics
+<h1>Prometheus metrics</h1>
 ![Prometheus metrics](image-3.png)
 
 ---
