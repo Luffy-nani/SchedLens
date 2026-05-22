@@ -36,10 +36,11 @@ func main() {
 	fmt.Println("SchedLens started. Collecting data...")
 	time.Sleep(2 * time.Second)
 
+	engine := metrics.NewEngine()
 	// Main loop
 	for {
 		snapshot2, _ := proc.ReadAllProcesses()
-		results := metrics.Calculate(snapshot2, snapshot1, 2*time.Second)
+		results := engine.Calculate(snapshot2, snapshot1, 2*time.Second)
 
 		// Fan-out to all three simultaneously
 		go exp.Update(results)
