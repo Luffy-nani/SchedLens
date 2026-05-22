@@ -52,7 +52,12 @@ func Calculate(current, previous []proc.ProcessStatus, timeDelta time.Duration) 
 
 		//Starvation detection for that processes
 		// Note: We took threshold value as 500ms(converted to nano)--> can be changed later
-		isStarved := waitDelta > 10_000 && cpuDelta < 1000
+		var isStarved bool
+		if curr.State == "R" && waitDelta > 500*1e6 {
+			isStarved = true
+		} else {
+			isStarved = false
+		}
 
 		//Switche rate per sec = switches/time_delta in seconds(input)
 		var switchRate float64
