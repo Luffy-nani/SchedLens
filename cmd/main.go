@@ -3,6 +3,7 @@ package main
 import (
 	"SchedLens/internal/api"
 	"SchedLens/internal/cli"
+	appconfig "SchedLens/internal/config"
 	"SchedLens/internal/exporter"
 	"SchedLens/internal/healer"
 	"SchedLens/internal/metrics"
@@ -13,6 +14,13 @@ import (
 )
 
 func main() {
+	// Load config
+	cfg, err := appconfig.Load("config.yaml")
+	if err != nil {
+		fmt.Println("Error loading config:", err)
+		return
+	}
+
 	// Start OTel exporter
 	exp, err := exporter.NewOtelExporter()
 	if err != nil {
@@ -37,8 +45,8 @@ func main() {
 	fmt.Println("SchedLens started. Collecting data...")
 	time.Sleep(2 * time.Second)
 
-	engine := metrics.NewEngine()
-	h := healer.NewHealer(30)
+	engine := metrics.NewEngine(cfg.Metrics)
+	h := healer.NewHealer(cfg.Healer)
 	// Main loop
 	for {
 		snapshot2, _ := proc.ReadAllProcesses()

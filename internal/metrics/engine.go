@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	appconfig "SchedLens/internal/config"
 	"SchedLens/internal/proc"
 	"time"
 )
@@ -18,11 +19,13 @@ type MetricResult struct {
 
 type Engine struct {
 	starvationTicks map[int]int // PID → consecutive starved checks
+	cfg             appconfig.MetricsConfig
 } //We use a struct here because we want to maintain state across calls to Calculate (specifically for starvation detection)--> to remember the number of consecutive ticks a process has been starved, we need to store that in the Engine struct so that it persists across calls to Calculate
 
-func NewEngine() *Engine {
+func NewEngine(cfg appconfig.MetricsConfig) *Engine {
 	return &Engine{
 		starvationTicks: make(map[int]int),
+		cfg:             cfg,
 	}
 } //constructor for Engine that initializes the starvationTicks map
 
@@ -64,10 +67,10 @@ func (e *Engine) Calculate(current, previous []proc.ProcessStatus, timeDelta tim
 
 		// Starvation detection with consecutive ticks
 		var isStarved bool
-		if curr.State == "R" && waitDelta > 500*1e6 && cpuDelta < 1000 {
+		if curr.State == "R" && waitDelta > e.cfg.StarvationThresholdMs*1e6 && cpuDelta < e.cfg.CpuDeltaThreshold {
 			e.starvationTicks[curr.PID]++
 			// Only flag after 3 consecutive checks — avoids false positives
-			if e.starvationTicks[curr.PID] >= 3 {
+			if e.starvationTicks[curr.PID] >= e.cfg.StarvationTicks {
 				isStarved = true
 			}
 		} else {

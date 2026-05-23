@@ -3,6 +3,7 @@
 package healer
 
 import (
+	appconfig "SchedLens/internal/config"
 	"SchedLens/internal/metrics"
 	"fmt"
 	"syscall"
@@ -10,20 +11,24 @@ import (
 )
 
 type Healer struct {
-	lastReniced     map[int]time.Time
-	boostedPIDs     map[int]bool
-	cooldownSeconds float64 // This is just a threshold value, can be outside of struct ( for simplicity)
+	lastReniced map[int]time.Time
+	boostedPIDs map[int]bool
+	cfg         appconfig.HealerConfig
 }
 
-func NewHealer(cooldownSeconds float64) *Healer {
+func NewHealer(cfg appconfig.HealerConfig) *Healer {
 	return &Healer{
-		lastReniced:     make(map[int]time.Time),
-		boostedPIDs:     make(map[int]bool),
-		cooldownSeconds: cooldownSeconds,
+		lastReniced: make(map[int]time.Time),
+		boostedPIDs: make(map[int]bool),
+		cfg:         cfg,
 	}
 }
 
 func (h *Healer) Heal(results []metrics.MetricResult) {
+	if !h.cfg.Enabled {
+		return
+	}
+
 	for _, r := range results {
 		if r.IsStarved {
 			h.maybeHeal(r.PID, r.Name)
@@ -42,19 +47,19 @@ func (h *Healer) maybeHeal(pid int, name string) {
 
 	// Check cooldown — don't renice if we did it recently
 	lastTime, exists := h.lastReniced[pid]
-	if exists && time.Since(lastTime).Seconds() < h.cooldownSeconds {
+	if exists && time.Since(lastTime).Seconds() < float64(h.cfg.CooldownSeconds) {
 		return
 	}
 
 	// Boost the process
-	err = syscall.Setpriority(syscall.PRIO_PROCESS, pid, -5)
+	err = syscall.Setpriority(syscall.PRIO_PROCESS, pid, h.cfg.ReniceValue)
 	if err != nil {
 		return
 	}
 
 	h.lastReniced[pid] = time.Now()
 	h.boostedPIDs[pid] = true
-	fmt.Printf("[HEALER] Boosted PID %d (%s) → nice -5\n", pid, name) //copy pasted
+	fmt.Printf("[HEALER] Boosted PID %d (%s) → nice %d\n", pid, name, h.cfg.ReniceValue) //copy pasted
 }
 
 func (h *Healer) maybeRollback(pid int, name string) {

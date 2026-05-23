@@ -1,0 +1,12 @@
+poller:
+  interval: 5s
+
+metrics:
+  starvation_threshold_ms: 500
+  cpu_delta_threshold: 1000
+  starvation_ticks: 3
+
+healer:
+  enabled: true
+  renice_value: -3
+  cooldown_seconds: 30
